@@ -1,6 +1,6 @@
 "use client";
 import { useState } from 'react';
-import { FiUpload, FiFile, FiX, FiCheck } from 'react-icons/fi';
+import { FiUpload, FiFile, FiX, FiCheck, FiLoader } from 'react-icons/fi';
 import axios from 'axios';
 
 export default function UploadResume() {
@@ -8,19 +8,18 @@ export default function UploadResume() {
   const [error, setError] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
+  const [analysisResults, setAnalysisResults] = useState(null);
 
   const handleFileChange = (e) => {
     const selectedFile = e.target.files[0];
     if (!selectedFile) return;
 
-    // Validate file type
     const validTypes = [
       'application/pdf',
       'application/msword',
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
     ];
     
-    // Validate file size (5MB max)
     if (selectedFile.size > 5 * 1024 * 1024) {
       setError('File size must be less than 5MB');
       return;
@@ -34,9 +33,10 @@ export default function UploadResume() {
     setFile(selectedFile);
     setError(null);
     setUploadSuccess(false);
+    setAnalysisResults(null);
   };
 
-  const uploadToMongoDB = async () => {
+  const uploadToN8n = async () => {
     if (!file) return;
     
     setIsUploading(true);
@@ -46,21 +46,26 @@ export default function UploadResume() {
       const formData = new FormData();
       formData.append('resume', file);
       
-      const response = await axios.post('/api/upload', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        },
-        onUploadProgress: (progressEvent) => {
-          // Optional: Add progress bar later
-          const percent = Math.round(
-            (progressEvent.loaded * 100) / progressEvent.total
-          );
-          console.log(`Upload: ${percent}%`);
+      // Updated to use your n8n webhook
+      const response = await axios.post(
+        'https://softglitch-n8n.onrender.com/webhook-test/42945de4-3570-4e54-8489-35708de0037f', 
+        formData,
+        {
+          headers: {
+            'Content-Type': 'multipart/form-data'
+          },
+          onUploadProgress: (progressEvent) => {
+            const percent = Math.round(
+              (progressEvent.loaded * 100) / progressEvent.total
+            );
+            console.log(`Upload: ${percent}%`);
+          }
         }
-      });
+      );
 
-      if (response.data.success) {
+      if (response.data) {
         setUploadSuccess(true);
+        setAnalysisResults(response.data); // Store the analysis results
         setTimeout(() => setUploadSuccess(false), 3000);
       }
     } catch (err) {
@@ -77,10 +82,11 @@ export default function UploadResume() {
   const removeFile = () => {
     setFile(null);
     setUploadSuccess(false);
+    setAnalysisResults(null);
   };
 
   return (
-    <div className="w-[80%] max-w-md mx-auto">
+    <div className="w-[80%] max-w-md mx-auto mt-[100px]">
       <label className="block">
         <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-blue-400 transition-colors">
           <input 
@@ -107,10 +113,14 @@ export default function UploadResume() {
             {uploadSuccess && (
               <FiCheck className="text-green-500 ml-2" />
             )}
+            {isUploading && (
+              <FiLoader className="animate-spin text-blue-500 ml-2" />
+            )}
           </div>
           <button 
             onClick={removeFile}
             className="text-gray-500 hover:text-red-500 transition-colors"
+            disabled={isUploading}
           >
             <FiX />
           </button>
@@ -121,9 +131,9 @@ export default function UploadResume() {
         <p className="text-red-500 text-sm mt-2">{error}</p>
       )}
 
-      {file && !uploadSuccess && (
+      {file && !uploadSuccess && !isUploading && (
         <button
-          onClick={uploadToMongoDB}
+          onClick={uploadToN8n}
           disabled={isUploading}
           className={`w-full mt-4 py-2 px-4 rounded-lg text-white transition-colors ${
             isUploading 
@@ -131,8 +141,26 @@ export default function UploadResume() {
               : 'bg-blue-600 hover:bg-blue-700'
           }`}
         >
-          {isUploading ? 'Uploading...' : 'Save to Database'}
+          Analyze Resume
         </button>
+      )}
+
+      {analysisResults && (
+        <div className="mt-6 p-4 bg-white rounded-lg border border-gray-200">
+          <h3 className="font-bold text-lg mb-2">Analysis Results</h3>
+          <div className="space-y-2">
+            {Object.entries(analysisResults).map(([key, value]) => (
+              <div key={key} className="flex justify-between">
+                <span className="font-medium text-gray-700 capitalize">
+                  {key.replace(/([A-Z])/g, ' $1').trim()}:
+                </span>
+                <span className="text-gray-900">
+                  {Array.isArray(value) ? value.join(', ') : value}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );
